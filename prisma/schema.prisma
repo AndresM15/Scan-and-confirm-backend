@@ -1,0 +1,42 @@
+// prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo de Usuario
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  name      String?
+  doses     DoseLog[] // Relación: Un usuario tiene muchas dosis
+  createdAt DateTime  @default(now())
+}
+
+// Modelo de Registro de Dosis (RF-01 y RN-03)
+model DoseLog {
+  id             String     @id @default(uuid())
+  medicationName String
+  timestamp      DateTime   @default(now()) // Se captura automáticamente
+  status         DoseStatus @default(TAKEN)
+  nfcTagId       String
+
+  // Relación con el usuario
+  userId         String
+  user           User       @relation(fields: [userId], references: [id])
+
+  // Índice compuesto para optimizar las consultas de validación de 1 minuto
+  @@index([userId, timestamp])
+}
+
+// Estados posibles del escaneo
+enum DoseStatus {
+  TAKEN
+  DUPLICATE_WARNING
+  MANUAL
+}

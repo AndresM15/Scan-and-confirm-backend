@@ -27,8 +27,8 @@ model DoseLog {
   nfcTagId       String
 
   // Relación con el usuario
-  userId         String
-  user           User       @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
   // Índice compuesto para optimizar las consultas de validación de 1 minuto
   @@index([userId, timestamp])

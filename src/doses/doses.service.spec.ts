@@ -1,4 +1,9 @@
-import { HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../prisma/prisma.service';
 import { DosesService } from './doses.service';
@@ -12,9 +17,6 @@ describe('DosesService', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
     },
-    user: {
-      upsert: jest.fn(),
-    },
   };
 
   const scanDto = {
@@ -26,7 +28,6 @@ describe('DosesService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     // Silencia los logs del servicio durante las pruebas
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     const module: TestingModule = await Test.createTestingModule({
@@ -70,7 +71,6 @@ describe('DosesService', () => {
       expect(prismaMock.doseLog.create).toHaveBeenCalledWith({
         data: scanDto,
       });
-      expect(prismaMock.user.upsert).not.toHaveBeenCalled();
     });
 
     it('busca duplicados solo dentro de los últimos 60 segundos', async () => {
@@ -104,27 +104,22 @@ describe('DosesService', () => {
       expect(prismaMock.doseLog.create).not.toHaveBeenCalled();
     });
 
-    it('crea el usuario y reintenta el registro cuando el usuario no existe (P2003)', async () => {
-      const createdDose = { id: 'dose-1', ...scanDto, status: 'TAKEN' };
+    it('rechaza con 404 USER_NOT_FOUND cuando el usuario no existe (P2003)', async () => {
       prismaMock.doseLog.findFirst.mockResolvedValue(null);
-      prismaMock.doseLog.create
-        .mockRejectedValueOnce({ code: 'P2003' })
-        .mockResolvedValueOnce(createdDose);
-      prismaMock.user.upsert.mockResolvedValue({ id: scanDto.userId });
+      prismaMock.doseLog.create.mockRejectedValue({ code: 'P2003' });
 
-      const result = await service.scanDose(scanDto);
+      const error = await service.scanDose(scanDto).catch((e: unknown) => e);
 
-      expect(result).toEqual(createdDose);
-      expect(prismaMock.user.upsert).toHaveBeenCalledWith({
-        where: { id: scanDto.userId },
-        update: {},
-        create: {
-          id: scanDto.userId,
-          email: expect.stringMatching(/^user123-\d+@test\.com$/),
-          name: 'Usuario Test',
-        },
+      expect(error).toBeInstanceOf(NotFoundException);
+      expect((error as NotFoundException).getStatus()).toBe(
+        HttpStatus.NOT_FOUND,
+      );
+      expect((error as NotFoundException).getResponse()).toEqual({
+        status: 'USER_NOT_FOUND',
+        message: 'El usuario "user-123" no existe.',
       });
-      expect(prismaMock.doseLog.create).toHaveBeenCalledTimes(2);
+      // No se crea ningún usuario ni se reintenta el registro
+      expect(prismaMock.doseLog.create).toHaveBeenCalledTimes(1);
     });
 
     it('propaga cualquier otro error de la base de datos', async () => {
@@ -133,7 +128,6 @@ describe('DosesService', () => {
 
       await expect(service.scanDose(scanDto)).rejects.toBe(dbError);
       expect(prismaMock.doseLog.create).not.toHaveBeenCalled();
-      expect(prismaMock.user.upsert).not.toHaveBeenCalled();
     });
   });
 });

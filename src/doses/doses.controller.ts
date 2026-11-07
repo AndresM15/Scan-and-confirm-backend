@@ -13,7 +13,14 @@ export class DosesController {
   @ApiOperation({ summary: 'Registra el escaneo NFC de un medicamento' })
   @ApiResponse({ status: 201, description: 'Dosis registrada exitosamente.' })
   @ApiResponse({ status: 400, description: 'Payload inválido o incompleto.' })
-  @ApiResponse({ status: 409, description: 'DUPLICATE_WARNING: Dosis doble detectada en < 1 minuto.' })
+  @ApiResponse({
+    status: 404,
+    description: 'USER_NOT_FOUND: El usuario no existe.',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'DUPLICATE_WARNING: Dosis doble detectada en < 1 minuto.',
+  })
   async scanDose(@Body() createScanDto: CreateScanDto) {
     return this.dosesService.scanDose(createScanDto);
   }

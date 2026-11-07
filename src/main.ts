@@ -1,9 +1,13 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Activa las validaciones de los DTO (class-validator): payload inválido -> 400
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
 
   // Configuración de Swagger
   const config = new DocumentBuilder()
@@ -22,4 +26,4 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Swagger documentación corriendo en: http://localhost:${port}/api/docs`);
 }
-bootstrap();
+void bootstrap();

@@ -1,4 +1,10 @@
-import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  HttpException,
+  HttpStatus,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScanDto } from './dto/create-scan.dto';
 
@@ -51,27 +57,11 @@ export class DosesService {
         throw error;
       }
 
-      // Si el error es violación de clave foránea P2003 (el usuario de prueba no existe en la tabla User)
+      // Si el error es violación de clave foránea P2003 (el usuario no existe en la tabla User), se rechaza el registro
       if (error?.code === 'P2003') {
-        this.logger.warn(`Usuario "${userId}" no existía en la base de datos. Creando usuario para permitir el registro...`);
-        const safePrefix = userId.replace(/[^a-zA-Z0-9]/g, '') || 'user';
-        await this.prisma.user.upsert({
-          where: { id: userId },
-          update: {},
-          create: {
-            id: userId,
-            email: `${safePrefix}-${Date.now()}@test.com`,
-            name: 'Usuario Test',
-          },
-        });
-
-        // Reintentamos crear la dosis
-        return this.prisma.doseLog.create({
-          data: {
-            userId,
-            nfcTagId,
-            medicationName,
-          },
+        throw new NotFoundException({
+          status: 'USER_NOT_FOUND',
+          message: `El usuario "${userId}" no existe.`,
         });
       }
 

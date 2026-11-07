@@ -14,9 +14,6 @@ describe('AppController (e2e)', () => {
       findFirst: jest.fn(),
       create: jest.fn(),
     },
-    user: {
-      upsert: jest.fn(),
-    },
   };
 
   beforeEach(async () => {
@@ -56,6 +53,20 @@ describe('AppController (e2e)', () => {
       .send(payload)
       .expect(201)
       .expect({ id: 'dose-1', ...payload });
+  });
+
+  it('/doses/scan (POST) responde 404 si el usuario no existe', () => {
+    prismaMock.doseLog.findFirst.mockResolvedValue(null);
+    prismaMock.doseLog.create.mockRejectedValue({ code: 'P2003' });
+
+    return request(app.getHttpServer())
+      .post('/doses/scan')
+      .send({
+        userId: 'no-existe',
+        nfcTagId: 'nfc-tag-789',
+        medicationName: 'Ibuprofeno',
+      })
+      .expect(404);
   });
 
   it('/doses/scan (POST) responde 400 si el payload está incompleto', () => {

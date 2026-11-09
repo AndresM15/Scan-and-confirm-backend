@@ -31,6 +31,25 @@
 $ npm install
 ```
 
+## Base de datos local (Docker + seed)
+
+Requiere Docker Desktop abierto.
+
+```bash
+cp .env.example .env     # una sola vez; ajusta POSTGRES_PORT si el 5433 está ocupado
+npm install
+npm run db:setup         # levanta PostgreSQL, aplica migraciones y carga el seed
+```
+
+| Script | Qué hace |
+|---|---|
+| `npm run db:up` / `db:down` | Levanta / apaga el contenedor `scan-and-confirm-db` (los datos se conservan en un volumen). |
+| `npm run db:migrate` | Aplica las migraciones de Prisma. |
+| `npm run db:seed` | Carga 2 usuarios y 5 dosis de ejemplo (idempotente: se puede repetir). |
+| `npm run db:reset` | Borra la base, reaplica migraciones y vuelve a cargar el seed. |
+
+Usuario de prueba para `POST /doses/scan`: `00000000-0000-4000-8000-000000000001`.
+
 ## Compile and run the project
 
 ```bash

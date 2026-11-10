@@ -2,6 +2,8 @@
 /dist
 /node_modules
 /build
+*.tsbuildinfo
+tsconfig.build.tsbuildinfo
 
 # Logs
 logs
@@ -34,6 +36,12 @@ lerna-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# AI assistants & agents
+.agents
+.claude
+.cursor
+.devin
 
 # dotenv environment variable files
 .env

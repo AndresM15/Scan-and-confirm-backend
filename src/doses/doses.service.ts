@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   HttpException,
   HttpStatus,
@@ -8,6 +9,11 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateScanDto } from './dto/create-scan.dto';
 
+// Ventana en la que un segundo escaneo se considera duplicado (RN-01)
+const DUPLICATE_WINDOW_MS = 60000;
+// Tolerancia por diferencia de reloj entre el celular y el servidor
+const CLOCK_SKEW_MS = 5000;
+
 @Injectable()
 export class DosesService {
   private readonly logger = new Logger(DosesService.name);
@@ -15,21 +21,35 @@ export class DosesService {
   constructor(private readonly prisma: PrismaService) {}
 
   async scanDose(createScanDto: CreateScanDto) {
-    const { userId, nfcTagId, medicationName } = createScanDto;
+    const { userId, nfcTagId, medicationName, clientTimestamp } = createScanDto;
+
+    // Escaneo hecho sin conexión: se conserva la hora real del dispositivo (RN-03)
+    const eventTime = clientTimestamp ? new Date(clientTimestamp) : undefined;
+
+    if (eventTime && eventTime.getTime() > Date.now() + CLOCK_SKEW_MS) {
+      throw new BadRequestException({
+        status: 'INVALID_CLIENT_TIMESTAMP',
+        message: 'clientTimestamp no puede ser una fecha futura.',
+      });
+    }
 
     try {
-      // 1. Calculamos la fecha y hora de hace exactamente 60 segundos (1 minuto)
-      const oneMinuteAgo = new Date(Date.now() - 60000);
+      // 1. Ventana de duplicado: 60 segundos. Sin clientTimestamp es "el último
+      //    minuto"; con clientTimestamp es 60 s alrededor de la hora del escaneo.
+      const timestampFilter = eventTime
+        ? {
+            gte: new Date(eventTime.getTime() - DUPLICATE_WINDOW_MS),
+            lte: new Date(eventTime.getTime() + DUPLICATE_WINDOW_MS),
+          }
+        : { gte: new Date(Date.now() - DUPLICATE_WINDOW_MS) };
 
-      // 2. Buscamos directamente en la BD si existe un escaneo DESPUÉS de ese minuto
+      // 2. Buscamos directamente en la BD si existe un escaneo dentro de esa ventana
       const recentDose = await this.prisma.doseLog.findFirst({
         where: {
           userId,
           nfcTagId,
           medicationName,
-          timestamp: {
-            gte: oneMinuteAgo,
-          },
+          timestamp: timestampFilter,
         },
       });
 
@@ -38,7 +58,8 @@ export class DosesService {
         throw new HttpException(
           {
             status: 'DUPLICATE_WARNING',
-            message: 'Alerta: Escaneo duplicado en menos de 1 minuto.',
+            message:
+              'Advertencia: Escaneo duplicado detectado en menos de 1 minuto',
           },
           HttpStatus.CONFLICT,
         );
@@ -50,6 +71,7 @@ export class DosesService {
           userId,
           nfcTagId,
           medicationName,
+          ...(eventTime && { timestamp: eventTime }),
         },
       });
     } catch (error: any) {

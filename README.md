@@ -23,13 +23,106 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Backend de **Scan & Confirm**: API REST (NestJS + Prisma + PostgreSQL) que registra la toma de un medicamento al escanear un tag NFC y avisa si se escaneó de nuevo en menos de 1 minuto.
+## Cómo ejecutar el proyecto (guía para el equipo)
 
-## Project setup
+### Requisitos
+- **Node.js** y npm.
+- **Docker Desktop**, abierto y corriendo (la base de datos PostgreSQL vive en un contenedor).
+- Git.
+
+### Primera vez (5 pasos)
 
 ```bash
-$ npm install
+# 1. Clonar y entrar
+git clone git@github.com:AndresM15/Scan-and-confirm-backend.git
+cd Scan-and-confirm-backend
+
+# 2. Instalar dependencias
+npm install
+
+# 3. Crear tu archivo de entorno (no se sube a git)
+cp .env.example .env
+
+# 4. Levantar PostgreSQL en Docker, aplicar migraciones y cargar datos de prueba
+npm run db:setup
+
+# 5. Arrancar la API en modo desarrollo
+npm run start:dev
 ```
+
+Cuando arranque verás en consola la URL de Swagger. Con el `PORT` del `.env.example` es:
+
+- API: `http://localhost:3000`
+- Documentación / pruebas desde el navegador (Swagger): **`http://localhost:3000/api/docs`**
+
+(Si tu `.env` define otro `PORT`, usa ese puerto.)
+
+### Probar el endpoint
+
+El seed crea un usuario de prueba con id `00000000-0000-4000-8000-000000000001`.
+
+```bash
+curl -X POST http://localhost:3000/doses/scan \
+  -H 'Content-Type: application/json' \
+  -d '{"userId":"00000000-0000-4000-8000-000000000001","nfcTagId":"nfc-tag-001","medicationName":"Ibuprofeno"}'
+```
+
+| Resultado | Cuándo |
+|---|---|
+| `201` | Dosis registrada (estado `TAKEN`). |
+| `409` `DUPLICATE_WARNING` | Segundo escaneo del mismo usuario/tag/medicamento en menos de 1 minuto. |
+| `404` `USER_NOT_FOUND` | El `userId` no existe. |
+| `400` | Falta un dato obligatorio (`userId`, `nfcTagId` o `medicationName`). |
+
+### Día a día
+
+Después de la primera vez, normalmente solo necesitas:
+
+```bash
+npm run db:up        # si el contenedor está apagado (Docker Desktop abierto)
+npm run start:dev
+```
+
+### Scripts de base de datos
+
+| Script | Qué hace |
+|---|---|
+| `npm run db:setup` | Todo en uno: levanta PostgreSQL, migra y carga el seed. |
+| `npm run db:up` / `npm run db:down` | Levanta / apaga el contenedor `scan-and-confirm-db`. Los datos se conservan en un volumen de Docker. |
+| `npm run db:migrate` | Aplica las migraciones de Prisma. |
+| `npm run db:seed` | Carga 2 usuarios y 5 dosis de ejemplo. Se puede repetir sin duplicar datos. |
+| `npm run db:reset` | **Borra** la base, reaplica migraciones y vuelve a cargar el seed. |
+| `npx prisma studio` | Explorador visual de la base de datos. |
+
+Si cambias `prisma/schema.prisma`: `npx prisma migrate dev --name <cambio>` y sube la carpeta nueva de `prisma/migrations`.
+
+### Pruebas
+
+```bash
+npm test             # unitarias
+npm run test:e2e     # e2e (usan Prisma simulado: no necesitan la base)
+npm run lint
+npm run build
+```
+
+> Usa siempre `npm test`, no `npx jest`: el script incluye una opción de Node necesaria porque NestJS 12 es ESM.
+
+### Problemas frecuentes
+
+| Síntoma | Solución |
+|---|---|
+| `Cannot connect to the Docker daemon` / `docker.sock` | Abre Docker Desktop y espera a que inicie. |
+| `port is already allocated` (5433) | Otro programa usa el puerto. Cambia `POSTGRES_PORT` **y** el puerto de `DATABASE_URL` en tu `.env`, y vuelve a correr `npm run db:up`. |
+| `Environment variable not found: DATABASE_URL` | Falta crear el `.env` (paso 3). |
+| `Cannot find module '@prisma/client'` / `PrismaClient` sin exportar | Corre `npx prisma generate`. |
+| `Cannot find module 'class-validator'` | Corre `npm install` (puede que tu rama esté desactualizada: haz `git pull`). |
+| Quiero empezar con la base limpia | `npm run db:reset`. |
+| Apagar todo y borrar los datos | `docker compose down -v`. |
+
+### Flujo de trabajo
+
+Nunca se hace commit directo a `main` ni a `QA`. Crea una rama `feature/SCRUM-<n>-<descripcion>`, haz commits tipo `feat(SCRUM-<n>): ...` y abre un PR hacia `QA` (más abajo, en "Reglas para Pull Requests").
 
 ## Compile and run the project
 

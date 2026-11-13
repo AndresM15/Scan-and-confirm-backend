@@ -12,7 +12,11 @@ export class DosesController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Registra el escaneo NFC de un medicamento' })
   @ApiResponse({ status: 201, description: 'Dosis registrada exitosamente.' })
-  @ApiResponse({ status: 400, description: 'Payload inválido o incompleto.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Payload inválido o incompleto (p. ej. falta nfcTagId) o clientTimestamp futuro.',
+  })
   @ApiResponse({
     status: 404,
     description: 'USER_NOT_FOUND: El usuario no existe.',

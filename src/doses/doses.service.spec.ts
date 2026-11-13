@@ -66,6 +66,7 @@ describe('DosesService', () => {
       expect(prismaMock.doseLog.findFirst).toHaveBeenCalledWith({
         where: {
           ...scanDto,
+          status: { not: 'DUPLICATE_WARNING' },
           timestamp: { gte: expect.any(Date) },
         },
       });
@@ -103,7 +104,36 @@ describe('DosesService', () => {
         message:
           'Advertencia: Escaneo duplicado detectado en menos de 1 minuto',
       });
-      expect(prismaMock.doseLog.create).not.toHaveBeenCalled();
+    });
+
+    it('guarda el intento duplicado con estado DUPLICATE_WARNING (SCRUM-24)', async () => {
+      prismaMock.doseLog.findFirst.mockResolvedValue({ id: 'dose-previa' });
+
+      await service.scanDose(scanDto).catch(() => undefined);
+
+      expect(prismaMock.doseLog.create).toHaveBeenCalledTimes(1);
+      expect(prismaMock.doseLog.create).toHaveBeenCalledWith({
+        data: { ...scanDto, status: 'DUPLICATE_WARNING' },
+      });
+    });
+
+    it('ignora los intentos DUPLICATE_WARNING al buscar la toma reciente', async () => {
+      prismaMock.doseLog.findFirst.mockResolvedValue(null);
+      prismaMock.doseLog.create.mockResolvedValue({ id: 'dose-1' });
+
+      await service.scanDose(scanDto);
+
+      const { where } = prismaMock.doseLog.findFirst.mock.calls[0][0];
+      expect(where.status).toEqual({ not: 'DUPLICATE_WARNING' });
+    });
+
+    it('responde 409 aunque falle el guardado del intento duplicado', async () => {
+      prismaMock.doseLog.findFirst.mockResolvedValue({ id: 'dose-previa' });
+      prismaMock.doseLog.create.mockRejectedValue(new Error('BD caída'));
+
+      const error = await service.scanDose(scanDto).catch((e: unknown) => e);
+
+      expect((error as HttpException).getStatus()).toBe(HttpStatus.CONFLICT);
     });
 
     describe('con clientTimestamp (escaneo hecho sin conexión)', () => {
@@ -152,7 +182,14 @@ describe('DosesService', () => {
           .catch((e: unknown) => e);
 
         expect((error as HttpException).getStatus()).toBe(HttpStatus.CONFLICT);
-        expect(prismaMock.doseLog.create).not.toHaveBeenCalled();
+        // El intento se guarda con la hora real del dispositivo
+        expect(prismaMock.doseLog.create).toHaveBeenCalledWith({
+          data: {
+            ...scanDto,
+            status: 'DUPLICATE_WARNING',
+            timestamp: offlineTime,
+          },
+        });
       });
 
       it('rechaza con 400 un clientTimestamp futuro', async () => {

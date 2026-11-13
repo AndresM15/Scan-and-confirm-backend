@@ -69,6 +69,74 @@ describe('AppController (e2e)', () => {
       .expect(404);
   });
 
+  it('/doses/scan (POST) responde 409 con el mensaje acordado si hay un duplicado', () => {
+    prismaMock.doseLog.findFirst.mockResolvedValue({ id: 'dose-previa' });
+
+    return request(app.getHttpServer())
+      .post('/doses/scan')
+      .send({
+        userId: 'user-123',
+        nfcTagId: 'nfc-tag-789',
+        medicationName: 'Ibuprofeno',
+      })
+      .expect(409)
+      .expect({
+        status: 'DUPLICATE_WARNING',
+        message:
+          'Advertencia: Escaneo duplicado detectado en menos de 1 minuto',
+      });
+  });
+
+  it('/doses/scan (POST) acepta clientTimestamp y lo guarda como timestamp', () => {
+    const clientTimestamp = '2026-01-01T08:00:00.000Z';
+    prismaMock.doseLog.findFirst.mockResolvedValue(null);
+    prismaMock.doseLog.create.mockResolvedValue({ id: 'dose-1' });
+
+    return request(app.getHttpServer())
+      .post('/doses/scan')
+      .send({
+        userId: 'user-123',
+        nfcTagId: 'nfc-tag-789',
+        medicationName: 'Ibuprofeno',
+        clientTimestamp,
+      })
+      .expect(201)
+      .then(() => {
+        expect(prismaMock.doseLog.create).toHaveBeenCalledWith({
+          data: {
+            userId: 'user-123',
+            nfcTagId: 'nfc-tag-789',
+            medicationName: 'Ibuprofeno',
+            timestamp: new Date(clientTimestamp),
+          },
+        });
+      });
+  });
+
+  it('/doses/scan (POST) responde 400 si clientTimestamp no es una fecha válida', () => {
+    return request(app.getHttpServer())
+      .post('/doses/scan')
+      .send({
+        userId: 'user-123',
+        nfcTagId: 'nfc-tag-789',
+        medicationName: 'Ibuprofeno',
+        clientTimestamp: 'ayer',
+      })
+      .expect(400);
+  });
+
+  it('/doses/scan (POST) responde 400 si clientTimestamp es futuro', () => {
+    return request(app.getHttpServer())
+      .post('/doses/scan')
+      .send({
+        userId: 'user-123',
+        nfcTagId: 'nfc-tag-789',
+        medicationName: 'Ibuprofeno',
+        clientTimestamp: '2999-01-01T00:00:00.000Z',
+      })
+      .expect(400);
+  });
+
   it('/doses/scan (POST) responde 400 si el payload está incompleto', () => {
     return request(app.getHttpServer())
       .post('/doses/scan')

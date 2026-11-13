@@ -71,7 +71,7 @@ curl -X POST http://localhost:3000/doses/scan \
 | Resultado | Cuándo |
 |---|---|
 | `201` | Dosis registrada (estado `TAKEN`). |
-| `409` `DUPLICATE_WARNING` | Segundo escaneo del mismo usuario/tag/medicamento en menos de 1 minuto. |
+| `409` `DUPLICATE_WARNING` | Segundo escaneo del mismo usuario/tag/medicamento en menos de 1 minuto. El intento queda guardado con estado `DUPLICATE_WARNING` y la toma original no cambia. |
 | `404` `USER_NOT_FOUND` | El `userId` no existe. |
 | `400` | Falta un dato obligatorio (`userId`, `nfcTagId` o `medicationName`). |
 

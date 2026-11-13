@@ -23,7 +23,8 @@ export class DosesController {
   })
   @ApiResponse({
     status: 409,
-    description: 'DUPLICATE_WARNING: Dosis doble detectada en < 1 minuto.',
+    description:
+      'DUPLICATE_WARNING: Dosis doble detectada en < 1 minuto. El intento se registra con estado DUPLICATE_WARNING y la toma original no se modifica.',
   })
   async scanDose(@Body() createScanDto: CreateScanDto) {
     return this.dosesService.scanDose(createScanDto);

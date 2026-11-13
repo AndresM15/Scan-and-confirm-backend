@@ -27,6 +27,7 @@ type DoseWhere = {
   userId?: string;
   nfcTagId?: string;
   medicationName?: string;
+  status?: { not?: string };
   timestamp?: { gte?: Date; lte?: Date };
 };
 
@@ -41,6 +42,7 @@ function crearDoseLogEnMemoria(usuarios: string[]) {
     (where.nfcTagId === undefined || r.nfcTagId === where.nfcTagId) &&
     (where.medicationName === undefined ||
       r.medicationName === where.medicationName) &&
+    (where.status?.not === undefined || r.status !== where.status.not) &&
     (where.timestamp?.gte === undefined ||
       r.timestamp >= where.timestamp.gte) &&
     (where.timestamp?.lte === undefined || r.timestamp <= where.timestamp.lte);
@@ -234,7 +236,7 @@ describe('POST /doses/scan (e2e) - SCRUM-27', () => {
     });
   });
 
-  describe('409 - escaneo duplicado', () => {
+  describe('409 - escaneo duplicado (SCRUM-24)', () => {
     it('rechaza el segundo escaneo idéntico dentro del mismo minuto', async () => {
       await escanear(escaneoValido).expect(201);
 
@@ -244,10 +246,23 @@ describe('POST /doses/scan (e2e) - SCRUM-27', () => {
         status: 'DUPLICATE_WARNING',
         message: expect.stringContaining('1 minuto'),
       });
-      expect(doseLog.registros).toHaveLength(1);
     });
 
-    it('no guarda nada cuando ya hay un escaneo de hace segundos', async () => {
+    it('guarda el intento con estado DUPLICATE_WARNING sin modificar la toma original', async () => {
+      await escanear(escaneoValido).expect(201);
+      const original = { ...doseLog.registros[0] };
+
+      await escanear(escaneoValido).expect(409);
+
+      expect(doseLog.registros).toHaveLength(2);
+      expect(doseLog.registros[0]).toEqual(original);
+      expect(doseLog.registros[1]).toMatchObject({
+        ...escaneoValido,
+        status: 'DUPLICATE_WARNING',
+      });
+    });
+
+    it('guarda el intento cuando ya hay una toma de hace segundos', async () => {
       doseLog.registros.push({
         id: 'dose-reciente',
         ...escaneoValido,
@@ -257,16 +272,42 @@ describe('POST /doses/scan (e2e) - SCRUM-27', () => {
 
       await escanear(escaneoValido).expect(409);
 
-      expect(doseLog.create).not.toHaveBeenCalled();
-      expect(doseLog.registros).toHaveLength(1);
+      expect(doseLog.create).toHaveBeenCalledTimes(1);
+      expect(doseLog.registros).toHaveLength(2);
+      expect(doseLog.registros[1].status).toBe('DUPLICATE_WARNING');
     });
 
-    it('sigue rechazando intentos repetidos mientras dure la ventana', async () => {
+    it('registra cada intento repetido mientras dure la ventana', async () => {
       await escanear(escaneoValido).expect(201);
       await escanear(escaneoValido).expect(409);
       await escanear(escaneoValido).expect(409);
 
-      expect(doseLog.registros).toHaveLength(1);
+      expect(doseLog.registros.map((r) => r.status)).toEqual([
+        'TAKEN',
+        'DUPLICATE_WARNING',
+        'DUPLICATE_WARNING',
+      ]);
+    });
+
+    it('los intentos duplicados no prolongan la ventana de 1 minuto', async () => {
+      // Toma a los -80 s; intento duplicado guardado a los -30 s
+      doseLog.registros.push(
+        {
+          id: 'toma',
+          ...escaneoValido,
+          status: 'TAKEN',
+          timestamp: new Date(Date.now() - 80000),
+        },
+        {
+          id: 'intento',
+          ...escaneoValido,
+          status: 'DUPLICATE_WARNING',
+          timestamp: new Date(Date.now() - 30000),
+        },
+      );
+
+      // La última toma real fue hace más de 1 minuto: debe aceptarse
+      await escanear(escaneoValido).expect(201);
     });
   });
 });
